@@ -13,7 +13,12 @@ st.set_page_config(
     page_icon="🧬"
 )
 
-client = OpenAI()
+try:
+    client = OpenAI(
+        api_key=st.secrets["OPENAI_API_KEY"]
+    )
+except:
+    client = OpenAI()
 
 # ID del Vector Store
 VECTOR_STORE_ID = "vs_6a9ef1bd8a1c8191a51660152db783ed"
