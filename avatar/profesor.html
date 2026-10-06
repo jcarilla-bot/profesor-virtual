@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;color:#173f3b}
+.card{height:448px;border:1px solid #cdded8;border-radius:22px;overflow:hidden;background:radial-gradient(ellipse at 50% 36%,#fffef7,#e5f1eb);position:relative}
+.badge{position:absolute;top:18px;left:20px;font-size:10px;font-weight:750;letter-spacing:2px;z-index:1}
+.badge span{display:block;font-size:14px;letter-spacing:0;margin-top:5px;font-weight:500}
+#stage{height:326px;width:100%}canvas{display:block;width:100%;height:100%}
+.controls{position:absolute;bottom:0;width:100%;padding:12px 20px 15px;background:#ffffffd9;border-top:1px solid #d8e5df}
+audio{width:100%;height:35px;margin:5px 0}#status{margin:0 0 5px;font-weight:600;font-size:13px}
+.small{font-size:11px;color:#536e68;display:flex;align-items:center;justify-content:space-between;gap:8px}
+label{cursor:pointer;display:flex;align-items:center;gap:5px}input{accent-color:#197e70}
+#fallback{display:none;position:absolute;top:120px;text-align:center;width:100%;padding:20px}
+</style></head>
+<body><section class="card" aria-label="Profesor robot animado en tres dimensiones">
+<div class="badge">BIO<span>Tu profesor virtual</span></div>
+<div id="stage" role="img" aria-label="Robot profesor con ojos expresivos, bata blanca y emblema de biología"></div>
+<div id="fallback">El personaje 3D no está disponible en este navegador. Puedes escuchar la explicación.</div>
+<div class="controls"><p id="status" role="status" aria-live="polite"></p>
+<audio id="voice" controls preload="metadata" aria-label="Escuchar explicación breve"></audio>
+<div class="small"><span>Voz generada por IA</span><label><input type="checkbox" id="motion">Animación</label></div>
+</div></section>
+<script>/* MOTOR_3D */</script>
+<script>
+'use strict';
+const data = /* DATOS_AVATAR */;
+const audio = document.getElementById('voice');
+const statusText = document.getElementById('status');
+const motion = document.getElementById('motion');
+motion.checked = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+if(data.audio){audio.src='data:audio/mpeg;base64,'+data.audio;statusText.textContent='Pulsa ▶ para escuchar la explicación.';}
+else{audio.hidden=true;statusText.textContent='Listo para ayudarte. Prepara una explicación oral.';}
+let context, analyser, samples, source, speaking=false, mouthLevel=0;
+function setupAudio(){
+  if(context || !(window.AudioContext || window.webkitAudioContext))return;
+  try{
+    context=new (window.AudioContext||window.webkitAudioContext)();
+    analyser=context.createAnalyser();analyser.fftSize=256;
+    samples=new Uint8Array(analyser.fftSize);
+    source=context.createMediaElementSource(audio);
+    source.connect(analyser);analyser.connect(context.destination);
+  }catch(e){if(source && context)source.connect(context.destination);analyser=null;}
+}
+audio.addEventListener('play',()=>{setupAudio();if(context)context.resume().catch(()=>{});});
+audio.addEventListener('playing',()=>{speaking=true;statusText.textContent='Escuchando la explicación…';});
+audio.addEventListener('waiting',()=>{speaking=false;statusText.textContent='Cargando audio…';});
+audio.addEventListener('pause',()=>{speaking=false;mouthLevel=0;statusText.textContent='En pausa. Puedes continuar cuando quieras.';});
+audio.addEventListener('ended',()=>{speaking=false;mouthLevel=0;statusText.textContent='Puedes volver a escucharla.';});
+audio.addEventListener('error',()=>{speaking=false;statusText.textContent='No se pudo reproducir el audio en este navegador.';});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)audio.pause();});
+window.addEventListener('pagehide',()=>{audio.pause();if(context)context.close();});
+
+try{
+ const stage=document.getElementById('stage');
+ const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+ renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x000000,0);
+ renderer.outputColorSpace=THREE.SRGBColorSpace;stage.appendChild(renderer.domElement);
+ const scene=new THREE.Scene();
+ const camera=new THREE.PerspectiveCamera(35,1,0.1,50);camera.position.set(0,1.5,6.3);camera.lookAt(0,1.25,0);
+ scene.add(new THREE.HemisphereLight(0xfffdf1,0x40786e,2.8));
+ const key=new THREE.DirectionalLight(0xffffff,3);key.position.set(-3,5,5);scene.add(key);
+ const rim=new THREE.DirectionalLight(0xc2fff0,2);rim.position.set(3,2,-3);scene.add(rim);
+ const mat=(color,roughness=.36,metalness=.05)=>new THREE.MeshStandardMaterial({color,roughness,metalness});
+ const white=mat(0xf1f4ea),teal=mat(0x138f82,.3,.2),dark=mat(0x123e42,.3,.2),joint=mat(0x59847e),gold=mat(0xf2b057);
+ const glow=new THREE.MeshStandardMaterial({color:0x8cffe4,emissive:0x40cdb0,emissiveIntensity:.7,roughness:.3});
+ const robot=new THREE.Group();scene.add(robot);
+ function ellipsoid(parent,x,y,z,sx,sy,sz,material){const mesh=new THREE.Mesh(new THREE.SphereGeometry(1,32,24),material);mesh.position.set(x,y,z);mesh.scale.set(sx,sy,sz);parent.add(mesh);return mesh;}
+ function capsule(parent,x,y,z,r,len,material){const m=new THREE.Mesh(new THREE.CapsuleGeometry(r,len,8,20),material);m.position.set(x,y,z);parent.add(m);return m;}
+ ellipsoid(robot,0,.65,0,.59,.66,.4,white);
+ ellipsoid(robot,0,.67,.37,.36,.42,.09,teal);
+ capsule(robot,0,1.25,0,.18,.15,joint);
+ const head=new THREE.Group();head.position.set(0,1.86,0);robot.add(head);
+ ellipsoid(head,0,0,0,.78,.65,.56,white);
+ ellipsoid(head,0,-.01,.46,.66,.46,.19,dark);
+ for(const s of [-1,1]){
+   ellipsoid(head,s*.77,0,0,.13,.23,.21,teal);
+   ellipsoid(head,s*.81,0,.1,.07,.13,.14,gold);
+ }
+ const eyes=[];
+ for(const s of [-1,1]){
+   const e=ellipsoid(head,s*.245,.095,.639,.09,.115,.033,glow);eyes.push(e);
+   ellipsoid(head,s*.245-.018,.125,.67,.018,.025,.012,white);
+ }
+ const mouth=ellipsoid(head,0,-.185,.641,.18,.025,.026,glow);
+ capsule(head,.35,.66,-.04,.025,.15,joint);
+ ellipsoid(head,.35,.77,-.04,.065,.065,.065,gold);
+ const arms=[];
+ for(const s of [-1,1]){
+   const arm=new THREE.Group();arm.position.set(s*.61,1,0);robot.add(arm);arms.push(arm);
+   ellipsoid(arm,0,0,0,.15,.15,.15,joint);
+   capsule(arm,0,-.23,0,.13,.3,white);
+   ellipsoid(arm,0,-.5,.01,.15,.17,.15,teal);
+ }
+ for(const s of [-1,1]){capsule(robot,s*.24,.05,0,.16,.16,joint);ellipsoid(robot,s*.24,-.15,.14,.23,.13,.32,white);}
+ // Emblema de biología: dos hebras y travesaños de una doble hélice.
+ for(let i=0;i<10;i++){
+   const y=.45+i*.04,a=i*.6;
+   const x=Math.sin(a)*.1;
+   ellipsoid(robot,x,y,.479,.027,.027,.02,white);
+   ellipsoid(robot,-x,y,.479,.025,.025,.02,gold);
+   if(i%2===0){const bar=new THREE.Mesh(new THREE.BoxGeometry(Math.max(.025,Math.abs(x)*2),.009,.015),white);bar.position.set(0,y,.478);robot.add(bar);}
+ }
+ // Sombra suave dibujada localmente: no se descargan imágenes ni modelos.
+ const shadowCanvas=document.createElement('canvas');shadowCanvas.width=128;shadowCanvas.height=128;
+ const sc=shadowCanvas.getContext('2d'),gradient=sc.createRadialGradient(64,64,0,64,64,64);
+ gradient.addColorStop(0,'rgba(17,70,57,.24)');gradient.addColorStop(1,'rgba(17,70,57,0)');sc.fillStyle=gradient;sc.fillRect(0,0,128,128);
+ const shadow=new THREE.Mesh(new THREE.PlaneGeometry(2.9,1.4),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(shadowCanvas),transparent:true,depthWrite:false}));
+ shadow.rotation.x=-Math.PI/2;shadow.position.set(0,-.28,0);scene.add(shadow);
+ new ResizeObserver(()=>{const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.position.z=w<380?7.8:6.3;camera.updateProjectionMatrix();}).observe(stage);
+ let last=0;
+ function animate(now){
+   requestAnimationFrame(animate);if(document.hidden||now-last<32)return;last=now;
+   const t=now/1000,move=motion.checked;
+   let target=0;
+   if(speaking && analyser){analyser.getByteTimeDomainData(samples);let sum=0;for(const v of samples)sum+=((v-128)/128)**2;target=Math.min(1,Math.sqrt(sum/samples.length)*7);}
+   else if(speaking)target=.25+.2*Math.sin(t*17);
+   mouthLevel+=(target-mouthLevel)*.45;
+   mouth.scale.y=move?.025+mouthLevel*.12:.025;
+   mouth.scale.x=.18-(move?mouthLevel*.025:0);
+   head.rotation.y=move?Math.sin(t*.65)*.1:0;
+   head.rotation.z=move?Math.sin(t*.9)*.025:0;
+   head.position.y=1.86+(move?Math.sin(t*1.3)*.017:0);
+   const blink=move && t%4.6<.14?.1:1;eyes.forEach(e=>e.scale.y=.115*blink);
+   arms[0].rotation.z=move?-.16-Math.sin(t*1.2)*.04:-.16;
+   arms[1].rotation.z=.16+(move&&speaking?.36+.15*Math.sin(t*2.5):0);
+   robot.rotation.y=move?Math.sin(t*.35)*.045:0;
+   renderer.render(scene,camera);
+ }
+ requestAnimationFrame(animate);
+ renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();document.getElementById('fallback').style.display='block';});
+}catch(e){document.getElementById('fallback').style.display='block';}
+</script></body></html>
